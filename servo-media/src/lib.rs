@@ -11,11 +11,36 @@ use player::Player;
 use streams::{MediaStream, MediaOutput};
 use streams::capture::MediaTrackConstraintSet;
 use webrtc::{WebRtcController, WebRtcSignaller};
+use std::num::NonZeroU32;
+use std::collections::HashSet;
+use std::rc::Rc;
 
-pub struct ServoMedia(Box<Backend>);
+pub struct ServoMedia{
+    b: Box<Backend>,
+    mediaContextId: (u32, NonZeroU32),
+    muteables: HashSet<Rc<Muteable>>
+}
 
 static INITIALIZER: Once = sync::ONCE_INIT;
 static mut INSTANCE: *mut Mutex<Option<Arc<ServoMedia>>> = 0 as *mut _;
+
+trait Muteable {
+     fn mute(&mut self) {
+         //mute things
+     }
+ }
+
+impl Muteable for AudioContext {
+    fn mute(&mut self) {
+        //mute things
+    }
+}
+
+impl Muteable for Player {
+    fn mute(&mut self) {
+        // mute things
+    }
+}
 
 pub trait BackendInit {
     fn init() -> Box<Backend>;
@@ -45,6 +70,30 @@ impl ServoMedia {
         match *instance {
             Some(ref instance) => Ok(instance.clone()),
             None => Err(()),
+        }
+    }
+
+    fn create_audiocontext(&mut self, tup:  (u32, NonZeroU32), options: AudioContextOptions) -> Rc<AudioContext<Backend>> {
+        // insert tuple into mutables
+        let value = Rc::new(AudioContext::new(options));
+        let clone_value = Rc::clone(&value);
+        self.muteables.insert(tup, value);
+        return clone_value;
+    }
+
+    fn create_player(&mut self, tup:  (u32, NonZeroU32)) -> Rc<Player<Error=Error>> {
+        // insert tuple into mutables
+        let value = Rc::new(Box::new(Backend::make_player()));
+        let clone_value = Rc::clone(&value);
+        self.muteables.insert(tup, value);
+        return clone_value;
+    }
+
+    fn mute_media_context(self) {
+        //go through list of stored Muteable s and call their mute method
+        for (key, context) in self.muteables {
+            print!("{:?}", key);
+            context.mute();
         }
     }
 }
